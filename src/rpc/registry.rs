@@ -5,7 +5,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::RwLock;
-use log::{debug, info, warn, error};
+use log::{debug, warn, error};
 
 use serde_json::Value;
 
@@ -22,11 +22,11 @@ pub mod store {
 
   /// Get a value from the global store by its type
   pub fn get<T: 'static + Send + Sync>() -> Result<Option<Arc<T>>, anyhow::Error> {
-    debug!("Getting {:?} from store", std::any::type_name::<T>());
+    debug!("getting {:?} from store", std::any::type_name::<T>());
     let store = GLOBAL_STORE
       .read()
       .map_err(|e| {
-        error!("Read lock failed: {:?}", e);
+        error!("read lock failed: {:?}", e);
         anyhow!("Failed to acquire read lock")
       })?;
 
@@ -35,7 +35,7 @@ pub mod store {
       .and_then(|arc| Arc::downcast::<T>(Arc::clone(arc)).ok());
     
     if result.is_some() {
-      debug!("Found {:?} in store", std::any::type_name::<T>());
+      debug!("found {:?} in store", std::any::type_name::<T>());
     } else {
       debug!("{:?} not in store", std::any::type_name::<T>());
     }
@@ -45,11 +45,11 @@ pub mod store {
 
   /// Set a value in the global store, indexed by its type
   pub fn set<T: 'static + Send + Sync>(value: T) -> Result<(), anyhow::Error> {
-    debug!("Setting {:?} in store", std::any::type_name::<T>());
+    debug!("setting {:?} in store", std::any::type_name::<T>());
     let mut store = GLOBAL_STORE
       .write()
       .map_err(|e| {
-        error!("Write lock failed: {:?}", e);
+        error!("write lock failed: {:?}", e);
         anyhow!("Failed to acquire write lock")
       })?;
 
@@ -74,7 +74,7 @@ pub struct RpcMethodRegistry {
 impl RpcMethodRegistry {
   /// Create a new empty RPC method registry
   pub fn new() -> Self {
-    debug!("Creating method registry");
+    debug!("creating method registry");
     Self {
       methods: HashMap::new(),
     }
@@ -83,29 +83,29 @@ impl RpcMethodRegistry {
   /// Register a new RPC method handler
   pub fn handle(&mut self, method: &str, callback: RpcMethodCallback) -> Result<(), anyhow::Error> {
     if self.methods.contains_key(method) {
-      warn!("Method '{}' already exists", method);
+      warn!("method '{}' already exists", method);
       return Err(anyhow!("Method {} already exists", method));
     }
-    debug!("Registered method: {}", method);
+    debug!("registered method: {}", method);
     self.methods.insert(method.to_string(), callback);
     Ok(())
   }
 
   /// Call a registered RPC method with the given message
   pub async fn call(&self, message: &RpcMessage, server: Arc<RpcServer>) -> Result<Value, anyhow::Error> {
-    debug!("Calling method: {}", message.method);
+    debug!("calling method: {}", message.method);
     let callback = match self.methods.get(&message.method) {
       Some(cb) => cb,
       None => {
-        warn!("Method not found: {}", message.method);
+        warn!("method not found: {}", message.method);
         return Err(anyhow!("Method {} not found", message.method));
       }
     };
 
     let result = callback(message.params.as_ref(), server).await;
     match &result {
-      Ok(_) => debug!("Method {} succeeded", message.method),
-      Err(e) => warn!("Method {} failed: {}", message.method, e),
+      Ok(_) => debug!("method {} succeeded", message.method),
+      Err(e) => warn!("method {} failed: {}", message.method, e),
     }
     result
   }

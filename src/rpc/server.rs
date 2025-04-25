@@ -27,7 +27,7 @@ pub struct RpcServer {
 impl RpcServer {
   /// Create a new RPC server with the given method registry
   pub fn new(registry: Arc<Mutex<RpcMethodRegistry>>) -> Self {
-    info!("RPC server init");
+    info!("frpd init");
     Self {
       registry,
       peers: Arc::new(Mutex::new(HashMap::new())),
@@ -42,11 +42,11 @@ impl RpcServer {
   ) -> Result<(), anyhow::Error> {
     let peer_count = {
       let peers = self.peers.lock().await;
-      debug!("Broadcasting to {} clients", peers.len());
-      trace!("Message: {:?}", message);
+      debug!("broadcasting to {} clients", peers.len());
+      trace!("message: {:?}", message);
       
       if let Some(ex) = exclude {
-        debug!("Excluding {}", ex);
+        debug!("excluding {}", ex);
       }
 
       let broadcast_recipients = peers
@@ -60,7 +60,7 @@ impl RpcServer {
       let mut send_count = 0;
       for recipient in broadcast_recipients {
         if let Err(e) = recipient.unbounded_send(message.clone()) {
-          warn!("Broadcast failed: {}", e);
+          warn!("broadcast failed: {}", e);
         } else {
           send_count += 1;
         }
@@ -68,7 +68,7 @@ impl RpcServer {
       send_count
     };
     
-    debug!("Broadcast complete: {} clients", peer_count);
+    debug!("broadcast complete: {} clients", peer_count);
     Ok(())
   }
 
@@ -80,15 +80,15 @@ impl RpcServer {
     addr: SocketAddr,
     server: Arc<RpcServer>,
   ) {
-    info!("TCP connection from: {}", addr);
+    info!("tcp connection from: {}", addr);
     let ws_stream = match accept_async(stream).await {
       Ok(ws) => ws,
       Err(e) => {
-        error!("WS handshake failed: {}: {}", addr, e);
+        error!("ws handshake failed: {}: {}", addr, e);
         return;
       }
     };
-    info!("WS connection established: {}", addr);
+    info!("ws connection established: {}", addr);
 
     let (mut writer, mut reader) = ws_stream.split();
     let (tx, mut rx) = unbounded::<Message>();
@@ -96,20 +96,20 @@ impl RpcServer {
     {
       let mut peers_lock = peers.lock().await;
       peers_lock.insert(addr, tx.clone());
-      info!("Client {} connected (total: {})", addr, peers_lock.len());
+      info!("client {} connected (total: {})", addr, peers_lock.len());
     }
 
     let registry_clone = Arc::clone(&registry);
     let tx_clone = tx.clone();
     let server_clone = Arc::clone(&server);
 
-    debug!("Starting reader for {}", addr);
+    debug!("starting reader for {}", addr);
     let read_task = tokio::spawn(async move {
       while let Some(message_result) = reader.next().await {
         let message = match message_result {
           Ok(msg) => msg,
           Err(e) => {
-            error!("Read error {}: {}", addr, e);
+            error!("read error {}: {}", addr, e);
             break;
           }
         };
@@ -118,28 +118,28 @@ impl RpcServer {
         let tx_inner = tx_clone.clone();
         let server_inner = Arc::clone(&server_clone);
         
-        trace!("Processing message from {}", addr);
+        trace!("processing message from {}", addr);
         tokio::spawn(async move {
           let result: Result<(), anyhow::Error> =
             process_message(registry_inner, tx_inner, message, addr, server_inner).await;
           if let Err(e) = result {
-            error!("Process error {}: {}", addr, e);
+            error!("process error {}: {}", addr, e);
           }
         });
       }
-      debug!("Reader stopped for {}", addr);
+      debug!("reader stopped for {}", addr);
     });
 
-    debug!("Starting writer for {}", addr);
+    debug!("starting writer for {}", addr);
     let write_task = tokio::spawn(async move {
       while let Some(message) = rx.next().await {
-        trace!("Sending to {}: {:?}", addr, message);
+        trace!("sending to {}: {:?}", addr, message);
         if writer.send(message).await.is_err() {
-          debug!("Send failed to {}", addr);
+          debug!("send failed to {}", addr);
           break;
         }
       }
-      debug!("Writer stopped for {}", addr);
+      debug!("writer stopped for {}", addr);
     });
 
     let _ = read_task.await;
@@ -148,21 +148,21 @@ impl RpcServer {
     {
       let mut peers_lock = peers.lock().await;
       peers_lock.remove(&addr);
-      info!("Client {} disconnected (total: {})", addr, peers_lock.len());
+      info!("client {} disconnected (total: {})", addr, peers_lock.len());
     }
   }
 
   /// Start the RPC server and listen for incoming connections
   pub async fn run(&self, listener: TcpListener) -> Result<(), anyhow::Error> {
     let addr = listener.local_addr()?;
-    info!("Listening on {}", addr);
+    info!("listening on {}", addr);
 
     let server = Arc::new(self.clone());
-    debug!("Connection loop started");
+    debug!("connection loop started");
     loop {
       match listener.accept().await {
         Ok((stream, addr)) => {
-          debug!("Connection from {}", addr);
+          debug!("connection from {}", addr);
           tokio::spawn(Self::handle_connection(
             Arc::clone(&self.registry),
             Arc::clone(&self.peers),
@@ -172,14 +172,14 @@ impl RpcServer {
           ));
         }
         Err(e) => {
-          error!("Accept failed: {}", e);
+          error!("accept failed: {}", e);
         }
       }
     }
   }
 
   fn clone(&self) -> Self {
-    trace!("Cloning server");
+    trace!("cloning frpd");
     Self {
       registry: Arc::clone(&self.registry),
       peers: Arc::clone(&self.peers),
@@ -197,25 +197,25 @@ async fn process_message(
 ) -> Result<(), anyhow::Error> {
   match message {
     Message::Text(text) => {
-      debug!("Text from {}: {}", addr, text);
+      debug!("text from {}: {}", addr, text);
       let rpc_message: RpcMessage = match serde_json::from_str::<RpcMessage>(&text) {
         Ok(m) => {
-          debug!("Parsed: method={}, id={}", m.method, m.id);
+          debug!("parsed: method={}, id={}", m.method, m.id);
           m
         },
         Err(e) => {
-          warn!("Parse error {}: {}", addr, e);
+          warn!("parse error {}: {}", addr, e);
           let err_response =
-            RpcResponse::notification_error(anyhow!("Invalid JSON received"));
+            RpcResponse::notification_error(anyhow!("invalid json received"));
           let response_str = serde_json::to_string(&err_response)?;
-          debug!("Error response: {}", response_str);
+          debug!("error response: {}", response_str);
           tx.unbounded_send(Message::Text(response_str.into()))?;
           return Ok(());
         }
       };
       let id = rpc_message.id.clone();
 
-      debug!("Calling '{}' (id: '{}')", rpc_message.method, id);
+      debug!("calling '{}' (id: '{}')", rpc_message.method, id);
       let result: Result<Value, anyhow::Error> = {
         let registry_lock = registry.lock().await;
         registry_lock.call(&rpc_message, server).await
@@ -228,24 +228,24 @@ async fn process_message(
 
       let response = RpcResponse::from_result(id, result);
       let response_str = serde_json::to_string(&response)?;
-      debug!("Response to {}: {}", addr, response_str);
+      debug!("response to {}: {}", addr, response_str);
       tx.unbounded_send(Message::Text(response_str.into()))?;
     }
     Message::Binary(data) => {
-      debug!("Binary from {}: {} bytes", addr, data.len());
+      debug!("binary from {}: {} bytes", addr, data.len());
     }
     Message::Ping(data) => {
-      debug!("Ping from {}", addr);
+      debug!("ping from {}", addr);
       tx.unbounded_send(Message::Pong(data))?;
     }
     Message::Pong(_) => {
-      trace!("Pong from {}", addr);
+      trace!("pong from {}", addr);
     }
     Message::Close(reason) => {
-      info!("Close from {}: {:?}", addr, reason);
+      info!("close from {}: {:?}", addr, reason);
     }
     Message::Frame(_) => {
-      trace!("Frame from {}", addr);
+      trace!("frame from {}", addr);
     }
   }
   Ok(())
