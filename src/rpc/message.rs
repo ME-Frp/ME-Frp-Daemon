@@ -14,6 +14,15 @@ pub struct RpcMessage {
   pub params: Option<Value>,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RpcNotification {
+  /// Name of the RPC method to call
+  pub method: String,
+  /// Optional parameters for the method
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub params: Option<Value>,
+}
+
 /// Represents a JSON-RPC response
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RpcResponse {

@@ -3,7 +3,7 @@ mod server;
 mod message;
 mod macros;
 
-pub use message::{RpcMessage, RpcResponse};
+pub use message::{RpcMessage, RpcNotification, RpcResponse};
 pub use server::RpcServer;
 pub use registry::{RpcMethodRegistry, store};
 pub use crate::rpc_handler;
